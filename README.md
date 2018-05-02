@@ -1,34 +1,7 @@
 # CarND-Controls-PID
 Self-Driving Car Engineer Nanodegree Program
 
----
-
-## Dependencies
-
-* cmake >= 3.5
- * All OSes: [click here for installation instructions](https://cmake.org/install/)
-* make >= 4.1(mac, linux), 3.81(Windows)
-  * Linux: make is installed by default on most Linux distros
-  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)
-  * Windows: [Click here for installation instructions](http://gnuwin32.sourceforge.net/packages/make.htm)
-* gcc/g++ >= 5.4
-  * Linux: gcc / g++ is installed by default on most Linux distros
-  * Mac: same deal as make - [install Xcode command line tools]((https://developer.apple.com/xcode/features/)
-  * Windows: recommend using [MinGW](http://www.mingw.org/)
-* [uWebSockets](https://github.com/uWebSockets/uWebSockets)
-  * Run either `./install-mac.sh` or `./install-ubuntu.sh`.
-  * If you install from source, checkout to commit `e94b6e1`, i.e.
-    ```
-    git clone https://github.com/uWebSockets/uWebSockets 
-    cd uWebSockets
-    git checkout e94b6e1
-    ```
-    Some function signatures have changed in v0.14.x. See [this PR](https://github.com/udacity/CarND-MPC-Project/pull/3) for more details.
-* Simulator. You can download these from the [project intro page](https://github.com/udacity/self-driving-car-sim/releases) in the classroom.
-
-There's an experimental patch for windows in this [PR](https://github.com/udacity/CarND-PID-Control-Project/pull/3)
-
-## Basic Build Instructions
+## 0. Basic Build Instructions
 
 1. Clone this repo.
 2. Make a build directory: `mkdir build && cd build`
@@ -37,62 +10,64 @@ There's an experimental patch for windows in this [PR](https://github.com/udacit
 
 Tips for setting up your environment can be found [here](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/0949fca6-b379-42af-a919-ee50aa304e6a/lessons/f758c44c-5e40-4e01-93b5-1a82aa4e044f/concepts/23d376c7-0195-4276-bdf0-e02f1f3c665d)
 
-## Editor Settings
+## 1. Steering Controller
+The simulator provides the cross track error (CTE), speed, and steering angle at each time step which can be used to calculate the corrective actions required. Initially, conservative parameters were set for the steering PID controller to rely more on the proportional parameters rather than the integral and derivative components resulting in an oscillating driving behaviour and a slow speed (20% throttle). Since the steering angle is [-1,1] all steering values from the controller were mapped to match this range. The speed was set to 20% (0.20) for this portion of the tuning and the PID gains were determined heuristically to be Kp=0.05, Ki=0.005, and Kd=1.5 resulting in a wobbly drive around the track.
 
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
+<p align="center">
+ <img src="./res/steering_initial.gif">
+</p>
 
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
+## 2. Throttle Controller
+In the real world drivers tend to drive faster along straight sections of road when their CTE is lower and it is easier to stay in the center of the lane. Likewise, when entering into a turn and the CTE increases as it is more difficult to maintain lane center we drive slower as a result. This behaviour can be simulated by passing the throttle controller the CTE and have it respond inversely to how the steering controller works; as system error decreases the result (throttle) increases. 
 
-## Code Style
+## 3. Parameter Optimization
+The car now drives around the track but as mentioned in the course lectures, all this swaying would make the passengers seasick after a little while. Rather than heuristically tuning these controllers we can implement a function called Twiddle that dynamically adjusts the PID parameters based on system response and overall error.
 
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
+### 3.1 Twiddle Function
+This is a useful method for automating the tuning process for a PID controller. It works by deviating the gain parameters from their current value by a preset step size and then comparing the overall error after each state. The first step increases the gain by one step, but if that results in higher overall system error then it subtracts that tep and then steps once more in the negative direction. From these state changes, the gain step sizes are adjusted accordingly (+/-5%). As the controller converges on the optimal tuning, the step sizes slowly decrease as a result.
 
-## Project Instructions and Rubric
+step adds one step to the gain is increased,
 
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
+	def twiddle(tol=0.2): 
+	    p = [0, 0, 0]
+	    dp = [1, 1, 1]
+	    robot = make_robot()
+	    x_trajectory, y_trajectory, best_err = run(robot, p)
 
-More information is only accessible by people who are already enrolled in Term 2
-of CarND. If you are enrolled, see [the project page](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/f1820894-8322-4bb3-81aa-b26b3c6dcbaf/lessons/e8235395-22dd-4b87-88e0-d108c5e5bbf4/concepts/6a4d8d42-6a04-4aa6-b284-1697c0fd6562)
-for instructions and the project rubric.
+	    it = 0
+	    while sum(dp) > tol:
+	        print("Iteration {}, best error = {}".format(it, best_err))
+	        for i in range(len(p)):
+	            p[i] += dp[i]
+	            robot = make_robot()
+	            x_trajectory, y_trajectory, err = run(robot, p)
 
-## Hints!
+	            if err < best_err:
+	                best_err = err
+	                dp[i] *= 1.05
+	            else:
+	                p[i] -= 2 * dp[i]
+	                robot = make_robot()
+	                x_trajectory, y_trajectory, err = run(robot, p)
 
-* You don't have to follow this directory structure, but if you do, your work
-  will span all of the .cpp files here. Keep an eye out for TODOs.
+	                if err < best_err:
+	                    best_err = err
+	                    dp[i] *= 1.05
+	                else:
+	                    p[i] += dp[i]
+	                    dp[i] *= 0.95
+	        it += 1
+	    return p
 
-## Call for IDE Profiles Pull Requests
+Since Twiddle is intended to work on a full data set where the data sets are identical, the challange for this project was to implement it on a running system that is consistently receiving new and unique data. To assist the function with this we add states and iteration loops to set "periods" to record error from and use these periods to adjust the parameters. The drawback here is that the controller will "untune" itself when on corners and therefore will take longer to converge on the optimal settings. 
 
-Help your fellow students!
+### 3.2 Tuning the Controller
+The minimum car speed is set to 10 mph where the Twiddle function does not activate below 15 mph to ensure that the car will speed up as it converges on it's optimal tuning and slow down when becoming unstable. This essentially turns the optimization OFF when on the corners on the track and activates on the straight away. Letting the program run for a little while will allow the parameters to converge on their ideal values and the car will speed up.
 
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to we ensure
-that students don't feel pressured to use one IDE or another.
+## 4. Running the Simulator
 
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
+<p align="center">
+ <img src="./res/optimized.gif">
+</p>
 
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
 

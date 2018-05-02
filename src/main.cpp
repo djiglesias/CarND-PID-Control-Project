@@ -32,10 +32,37 @@ int main()
 {
   uWS::Hub h;
 
-  PID pid;
-  // TODO: Initialize the pid variable.
+  /************************************************************
+  * Initialize PID Controllers
+  ***********************************************************/
+  PID pid_steering, pid_throttle;
 
-  h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+  /* PID Gains */
+  // double Kp_s = 0.50; 
+  // double Ki_s = 0.01; 
+  // double Kd_s = 1.00; 
+  double Kp_t = 0.5;
+  double Ki_t = 0.0;
+  double Kd_t = 2.0;
+
+  /* Twiddle Parameters */
+  // double p[3] = {0.05, 1.5, 0.005};
+  // double p[3] = {0.076, 1.87, 0.006};
+  // double p[3] = {0.04, 3.2, 0.008};
+  double p[3] = {0.15, 2.2, 0.015};
+  double dp[3] = {0.01, 0.2, 0.001};
+  double error[3] = {1.0E50, 0.0, 0.0};
+  unsigned int it = 0;
+  unsigned int index = 0;
+
+  /* Initalize Controllers */
+  pid_steering.Init(p[0], p[2], p[1]);
+  pid_throttle.Init(Kp_t, Ki_t, Kd_t);
+  
+  #define ITERATIONS   500
+  //#define TWIDDLE_TUNE
+
+  h.onMessage([&pid_steering, &pid_throttle, &p, &dp, &it, &index, &error](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -50,22 +77,83 @@ int main()
           double cte = std::stod(j[1]["cte"].get<std::string>());
           double speed = std::stod(j[1]["speed"].get<std::string>());
           double angle = std::stod(j[1]["steering_angle"].get<std::string>());
-          double steer_value;
-          /*
-          * TODO: Calcuate steering value here, remember the steering value is
-          * [-1, 1].
-          * NOTE: Feel free to play around with the throttle and speed. Maybe use
-          * another PID controller to control the speed!
-          */
+          double steer_value, throttle_value;
           
-          // DEBUG
-          std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
+          /************************************************************
+           * Calculate Steering Angle
+           ***********************************************************/
+          pid_steering.UpdateError(cte);
+          steer_value = pid_steering.TotalError();
+
+          #ifdef TWIDDLE_TUNE
+            /* Only Run Twiddle @ Speed */
+            if (speed >= 15) {
+
+              // Update error.
+              error[1] += error[1] + (double)fabs(steer_value);
+              
+              if (it == (ITERATIONS - 1)) {
+
+                /* Check Error Status */
+                if (error[1] < error[0] && error[2] == 0.0) {
+                  error[0] = error[1];        // Set new best error.
+                  dp[index] *= 1.05;          // Update new error step.
+                  p[index] += dp[index];      // Update gain.
+                  error[2] = 1.0;
+                }
+                else if (error[1] < error[0] && error[2] == 1.0) {
+                  error[0] = error[1];          // Set new best error.
+                  p[index] -= 2.0 * dp[index];  // Move two steps in other direction.
+                  error[2] = 1.0;               // Set last state.
+                }
+                else if (error[1] >= error[0]) {
+                  p[index] += dp[index];      // Restore original gain value.
+                  dp[index] *= 0.95;          // Update new error step.
+                  error[2] = 0.0;             // Reset last state.
+                  index = (index + 1) % 3;    // Move to next parameter.
+                }
+                p[index] -= 0.2 * dp[index];
+                dp[index] *= 0.9;
+
+                // Update parameters.
+                pid_steering.SetGains(p);
+                error[1] = 0.0;
+                std::cout << "[Kp, Ki, Kd]: " << pid_steering.Kp << ", " << pid_steering.Ki << ", " << pid_steering.Kd << std::endl;  
+
+              }
+              it = (it + 1) % ITERATIONS;
+            } else {
+              // reset counter and error
+              error[1] = 0.0;
+              it = 0;
+            }
+          #endif
+
+          // Map steering to range.
+          if (steer_value < -1.0)
+            steer_value = -1.0;
+          else if (steer_value > 1.0)
+            steer_value = 1.0;
+
+          /************************************************************
+           * Throttle Value
+           ***********************************************************/
+          pid_throttle.UpdateError(cte);
+          throttle_value = pid_throttle.TotalError();
+
+          // Map throttle.
+          double max_speed = 0.45;
+          if (throttle_value < -max_speed)
+            throttle_value = -max_speed;
+          if (throttle_value > max_speed)
+            throttle_value = max_speed;
+          throttle_value = max_speed - fabs(throttle_value) + 0.1;
 
           json msgJson;
           msgJson["steering_angle"] = steer_value;
-          msgJson["throttle"] = 0.3;
+          msgJson["throttle"] = throttle_value;
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {

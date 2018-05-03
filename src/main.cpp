@@ -130,10 +130,14 @@ int main()
           #endif
 
           // Map steering to range.
-          if (steer_value < -1.0)
-            steer_value = -1.0;
-          else if (steer_value > 1.0)
-            steer_value = 1.0;
+          double max_steer = 1.0;
+          if (steer_value < -max_steer)
+            steer_value = -max_steer;
+          else if (steer_value > max_steer)
+            steer_value = max_steer;
+
+          steer_value *= (0.15 + 0.85*fabs((50.0-speed)/50.0));
+          std::cout << "Steer value: " << steer_value << std::endl;
 
           /************************************************************
            * Throttle Value
@@ -142,7 +146,7 @@ int main()
           throttle_value = pid_throttle.TotalError();
 
           // Map throttle.
-          double max_speed = 0.45;
+          double max_speed = 0.50;
           if (throttle_value < -max_speed)
             throttle_value = -max_speed;
           if (throttle_value > max_speed)

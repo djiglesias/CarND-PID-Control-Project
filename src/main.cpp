@@ -38,17 +38,11 @@ int main()
   PID pid_steering, pid_throttle;
 
   /* PID Gains */
-  // double Kp_s = 0.50; 
-  // double Ki_s = 0.01; 
-  // double Kd_s = 1.00; 
   double Kp_t = 0.5;
   double Ki_t = 0.0;
   double Kd_t = 2.0;
 
   /* Twiddle Parameters */
-  // double p[3] = {0.05, 1.5, 0.005};
-  // double p[3] = {0.076, 1.87, 0.006};
-  // double p[3] = {0.04, 3.2, 0.008};
   double p[3] = {0.15, 2.2, 0.015};
   double dp[3] = {0.01, 0.2, 0.001};
   double error[3] = {1.0E50, 0.0, 0.0};
@@ -85,6 +79,9 @@ int main()
           pid_steering.UpdateError(cte);
           steer_value = pid_steering.TotalError();
 
+          /************************************************************
+           * widdle
+           ***********************************************************/
           #ifdef TWIDDLE_TUNE
             /* Only Run Twiddle @ Speed */
             if (speed >= 15) {
@@ -135,9 +132,7 @@ int main()
             steer_value = -max_steer;
           else if (steer_value > max_steer)
             steer_value = max_steer;
-
           steer_value *= (0.15 + 0.85*fabs((50.0-speed)/50.0));
-          std::cout << "Steer value: " << steer_value << std::endl;
 
           /************************************************************
            * Throttle Value

@@ -11,15 +11,32 @@ Self-Driving Car Engineer Nanodegree Program
 Tips for setting up your environment can be found [here](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/0949fca6-b379-42af-a919-ee50aa304e6a/lessons/f758c44c-5e40-4e01-93b5-1a82aa4e044f/concepts/23d376c7-0195-4276-bdf0-e02f1f3c665d)
 
 ## 1. PID Controller
+A common method for control systems is the PID controller which consists of three terms; the proportional gain (Kp) that deals with immediate error, derivative gain (Kd) that deals with rate of rate, and integral gain (Ki) that deals with cummlative error. For this project the error is the Cross Track Error (CTE) which is the distance to the center of the track.
+
+<p align="center">
+ <img src="./res/pid_equation.png">
+</p>
 
 ### 1.1 Proportional Gain
-...
+The proportional constant adjusts the output with respect to the target (center of track) where the output is zero when the error is zero and larger as the error grows larger. Below is a figure showing three values of Kp (Ki and Kd held constant) where a large gain may result in an unstable causing the error to oscillate with ever increasing magnitude.
+
+<p align="center">
+ <img src="./res/p_gain.jpg">
+</p>
 
 ### 1.2 Derivative Gain
-...
+The derivative constant adjusts the output with respect to the rate of change of the error and attempts to slow it down as the error approachs zero. Higher values of Kd result in an overdamped system causing a slower approach to zero as shown below for diffrent values of Kd (Kp and Ki held constant).
+
+<p align="center">
+ <img src="./res/d_gain.png">
+</p>
 
 ### 1.3 Integral Gain
-...
+The integral constant adjusts the output with respect to cummlative error which helps with system drift overtime. Higher values of Ki result in smoother system response and helps to reduce long term error. Three values of Ki are shown below for diffrent values of Ki (Kp and Kd held constant)
+
+<p align="center">
+ <img src="./res/i_gain.png">
+</p>
 
 ## 2. Steering Controller
 The simulator provides the cross track error (CTE), speed, and steering angle at each time step which can be used to calculate the corrective actions required. Initially, conservative parameters were set for the steering PID controller to rely more on the proportional parameters rather than the integral and derivative components resulting in an oscillating driving behaviour and a slow speed (20% throttle). Since the steering angle is [-1,1] all steering values from the controller were mapped to match this range. The speed was set to 20% (0.20) for this portion of the tuning and the PID gains were determined heuristically to be Kp=0.05, Ki=0.005, and Kd=1.5 resulting in a wobbly drive around the track. Lastly, just like in modern vehicles, as the speed increases the steering wheel "stiffens" to reduce the output angle. We mimick this by reducing the steering out down to 25% at max speed and 100% at the minimum speed.
@@ -76,7 +93,5 @@ The minimum car speed is set to 10 mph where the Twiddle function does not activ
 ## 5. Running the Simulator
 
 <p align="center">
- <img src="./res/optimized.mp4">
+ <img src="./res/optimized.gif">
 </p>
-
-
